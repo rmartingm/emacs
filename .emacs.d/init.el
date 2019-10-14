@@ -1,106 +1,191 @@
-;; emacs start up and basic personalization
-(menu-bar-mode)
-(scroll-bar-mode)
-(setq initial-scratch-message nil)
-(setq make-backup-files nil)
-(setq-default cursor-type 'bar)
+;; Basic emacs configuration
+(setq inhibit-startup-message t)
+(tool-bar-mode -1)
+(toggle-frame-maximized)
+(setq default-directory "~/")
+(defalias 'yes-or-no-p 'y-or-n-p)
 
-;; package archive
+;; Move custom configuration variables set by Emacs, to a seperate file
+(setq custom-file "~/.emacs.d/custom.el")
+(load custom-file 'noerror)
+
+;; Package setup
 (require 'package)
 (add-to-list 'package-archives
-             '("marmalade" . "http://marmalade-repo.org/packages/"))
+	     '("melpa-stable" . "http://stable.melpa.org/packages/"))
 (package-initialize)
 
-;; color-theme
-(require 'color-theme)
-(require 'color-theme-solarized)
-(setq color-theme-is-global t)
-(load-theme 'solarized-light t)
+;; Automatically reload files when they change on disk
+(global-auto-revert-mode 1)
+(setq auto-revert-verbose nil)
 
-;; diminish
+;; Install use-package
+(unless (package-installed-p 'use-package)
+  (package-refresh-contents)
+  (package-install 'use-package))
+(require 'use-package)
+(setq use-package-verbose t)
+(setq-default use-package-always-ensure t)
 
-(require 'diminish)
+;; Theme setup
+(add-to-list 'custom-theme-load-path "~/.emacs.d/themes/")
+(use-package zenburn-theme
+  :ensure t
+  :config
+  (load-theme 'zenburn t))
 
-;; clojure
-(require 'clojure-mode)
+;; Look and Feel
+(set-face-attribute 'region nil :background "gray20")
+(set-cursor-color "sienna1")
+(set-default-font "Source Code Pro-11")
+(setq-default visible-bell t)
+(delete-selection-mode t)
 
-;; rainbow delimiters
-(require 'rainbow-delimiters)
-(global-rainbow-delimiters-mode)
+;; ido and flx-ido
+(ido-mode t)
+(ido-everywhere t)
+(use-package ido-vertical-mode
+  :ensure t
+  :config
+  (ido-vertical-mode t))
 
-;; paredit
-(require 'paredit)
-(defun turn-on-paredit () (paredit-mode 1))
-(add-hook 'clojure-mode-hook 'turn-on-paredit)
-(add-hook 'emacs-lisp-mode-hook 'turn-on-paredit)
+(use-package flx-ido
+  :ensure t
+  :config
+  (flx-ido-mode 1))
 
-;; clean up paredit
+;; smex
+(use-package smex
+  :ensure t
+  :config
+  (smex-initialize)
+  (global-set-key (kbd "M-x") 'smex)
+  (global-set-key (kbd "M-X") 'smex-major-mode-commands)
+  (global-set-key (kbd "C-c C-c M-x") 'execute-extended-command))
 
-(eval-after-load 'paredit
-  '(progn
-     (diminish 'paredit-mode " Par")     
-     ;; These are handy everywhere, not just in lisp modes
-     (global-set-key (kbd "M-(") 'paredit-wrap-round)
-     (global-set-key (kbd "M-[") 'paredit-wrap-square)
-     (global-set-key (kbd "M-{") 'paredit-wrap-curly)
+(global-set-key [f7] 'start-kbd-macro)
+(global-set-key [f8] 'end-kbd-macro)
+(global-set-key [f9] 'call-last-kbd-macro)
+(global-set-key (kbd "C-z") 'undo)
+(global-set-key (kbd "C-x C-z") 'undo)
 
-     (global-set-key (kbd "M-)") 'paredit-close-round-and-newline)
-     (global-set-key (kbd "M-]") 'paredit-close-square-and-newline)
-     (global-set-key (kbd "M-}") 'paredit-close-curly-and-newline)
+(setq
+ frame-title-format
+ '((:eval (if (buffer-file-name)
+              (abbreviate-file-name (buffer-file-name))
+            "%b"))))
 
-     (dolist (binding (list (kbd "C-<left>") (kbd "C-<right>")
-                            (kbd "C-M-<left>") (kbd "C-M-<right>")))
-       (define-key paredit-mode-map binding nil))
+;; Removed to try to fix an issue - unable to start NREPL process
+;; ;; Adds some niceties/refactoring support
+;; (use-package clj-refactor
+;;   :ensure t
+;;   :config
+;;   (add-hook 'clojure-mode-hook
+;;             (lambda ()
+;;               (clj-refactor-mode 1))))
 
-     ;; Disable kill-sentence, which is easily confused with the kill-sexp
-     ;; binding, but doesn't preserve sexp structure
-     (define-key paredit-mode-map [remap kill-sentence] nil)
-     (define-key paredit-mode-map [remap backward-kill-sentence] nil)))
+;; Aggressively indents your clojure code
+(use-package aggressive-indent
+  :ensure t
+  :commands (aggressive-indent-mode)
+  :config
+  (add-hook 'clojure-mode-hook 'aggressive-indent-mode))
 
-;; nrepl
-(require 'nrepl)
-(add-hook 'nrepl-interaction-mode-hook 'nrepl-turn-on-eldoc-mode)
-(setq nrepl-popup-stacktraces nil)
-(add-to-list 'same-window-buffer-names "*nrepl*")
-(add-hook 'nrepl-mode-hook 'paredit-mode)
-(global-set-key [f9] 'nrepl-jack-in)
+;; Which-key
+(use-package which-key
+  :ensure t
+  :config
+  (which-key-mode))
 
-;; Auto complete
-(require 'auto-complete-config)
-(ac-config-default)
-(define-key ac-completing-map "\M-/" 'ac-stop) ; use M-/ to stop completion
+;; ELISP
+(add-hook 'emacs-lisp-mode-hook 'eldoc-mode)
 
-;; ac-nrepl
-(require 'ac-nrepl)
-(add-hook 'nrepl-mode-hook 'ac-nrepl-setup)
-(add-hook 'nrepl-interaction-mode-hook 'ac-nrepl-setup)
-(eval-after-load "auto-complete" '(add-to-list 'ac-modes 'nrepl-mode))
+;; Install and setup company-mode for autocompletion
+(use-package company
+  :ensure t
+  :init
+  (add-hook 'prog-mode-hook 'company-mode)
+  :config
+  (global-company-mode)
+  (setq company-tooltip-limit 10)
+  (setq company-idle-delay 0.2)
+  (setq company-echo-delay 0)
+  (setq company-minimum-prefix-length 3)
+  (setq company-require-match nil)
+  (setq company-selection-wrap-around t)
+  (setq company-tooltip-align-annotations t)
+  (setq company-tooltip-flip-when-above t)
+  ;; weight by frequency
+  (setq company-transformers '(company-sort-by-occurrence)))
 
-;; Use only spaces (no tabs at all).
-(setq-default indent-tabs-mode nil)
+;; Cider integrates a Clojure buffer with a REPL
+(use-package cider
+  :ensure t
+  :init
+  (setq cider-repl-pop-to-buffer-on-connect 'display-only
+        cider-show-error-buffer nil ;; changed from t in advised config to avoid error popups
+        cider-auto-select-error-buffer t
+        cider-repl-history-file "~/.emacs.d/cider-history"
+        cider-repl-wrap-history t
+        cider-repl-history-size 100
+        cider-repl-use-clojure-font-lock t
+        cider-docview-fill-column 70
+        cider-stacktrace-fill-column 76
+        ;; Stop error buffer from popping up while working in buffers other than REPL:
+        nrepl-popup-stacktraces nil
+        nrepl-log-messages nil
+        nrepl-hide-special-buffers t
+        cider-repl-use-pretty-printing t
+        cider-repl-result-prefix ";; => ")
 
-;; Always show column numbers.
-(setq-default column-number-mode t)
+  :config
+  (add-hook 'cider-mode-hook #'eldoc-mode)
+  (add-hook 'cider-repl-mode-hook #'paredit-mode)
+  (add-hook 'cider-repl-mode-hook #'company-mode)
+  (add-hook 'cider-mode-hook #'company-mode)
+  (add-hook 'cider-mode-hook
+            (local-set-key (kbd "<C-return>") 'cider-eval-defun-at-point))
 
-;; Display full pathname for files.
-(add-hook 'find-file-hooks
-          '(lambda ()
-             (setq mode-line-buffer-identification 'buffer-file-truename)))
+  (global-set-key [f12] 'cider-visit-error-buffer)) ;; this last was my add
+;;(add-to-list 'same-window-buffer-names "<em>nrepl</em>")
 
-;; For easy window scrolling up and down.
-(global-set-key "\M-n" 'scroll-up-line)
-(global-set-key "\M-p" 'scroll-down-line)
+(use-package clojure-mode
+  :ensure t
+  :config 
+  (add-hook 'clojure-mode-hook 'turn-on-eldoc-mode))
 
-;; Laptop numeric keyboard
+;; Better syntax highlighting
+(use-package clojure-mode-extra-font-locking
+  :ensure t)
 
-(global-set-key (kbd "<C-kp-home>") 'beginning-of-buffer)
-(global-set-key (kbd "<C-kp-end>") 'end-of-buffer)
-(global-set-key (kbd "<C-kp-right>") 'right-word)
-(global-set-key (kbd "<C-kp-left>") 'left-word)
-(global-set-key (kbd "<C-kp-up>") 'backward-paragraph)
-(global-set-key (kbd "<C-kp-down>") 'forward-paragraph)
+;; Paredit makes it easier to navigate/edit s-expressions as blocks.
+(use-package paredit
+  :ensure t
+  :init
+  (add-hook 'clojure-mode-hook 'enable-paredit-mode)
+  (add-hook 'emacs-lisp-mode-hook 'paredit-mode)
+  (add-hook 'cider-repl-mode-hook 'enable-paredit-mode))
 
-;; For easier regex search/replace.
-(defalias 'qrr 'query-replace-regexp)
+;; Show parenthesis mode
+(show-paren-mode 1)
 
-(menu-bar-mode)
+;; To add some colors to those boring parens
+(use-package rainbow-delimiters
+  :ensure t
+  :init (add-hook 'prog-mode-hook #'rainbow-delimiters-mode))
+
+;; Windmove keys
+(global-set-key (kbd "C-c <left>")  'windmove-left)
+(global-set-key (kbd "C-c <right>") 'windmove-right)
+(global-set-key (kbd "C-c <up>")    'windmove-up)
+(global-set-key (kbd "C-c <down>")  'windmove-down)
+(global-set-key (kbd "C-c C-<left>")  'windmove-left)
+(global-set-key (kbd "C-c C-<right>") 'windmove-right)
+(global-set-key (kbd "C-c C-<up>")    'windmove-up)
+(global-set-key (kbd "C-c C-<down>")  'windmove-down)
+
+;; Scrolling
+(setq mouse-wheel-scroll-amount '(1 ((shift) . 1))) ;; one line at a time
+(setq mouse-wheel-progressive-speed nil) ;; don't accelerate scrolling
+(setq mouse-wheel-follow-mouse 't) ;; scroll window under mouse
+(setq scroll-step 1) ;; keyboard scroll one line at a time
